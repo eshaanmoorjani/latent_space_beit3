@@ -218,17 +218,21 @@ class VQAHandler(TaskHandler):
         logits = model(
             image=image, question=language_tokens, 
             padding_mask=padding_mask)
+        # breakpoint()
         batch_size = language_tokens.shape[0]
         if labels is not None:
+            # TODO: with the eval_dataset arg, the if statement should be dependent on whether a person selected eval or not. not label based
+            # check if the prediction is incorrect, if so, then update the metrics
             scores = utils.VQAScore()(logits, labels) * 100.0
             self.metric_logger.meters['score'].update(scores.item(), n=batch_size)
-        else:
-            _, preds = logits.max(-1)
-            for image_id, pred in zip(qid, preds):
-                self.predictions.append({
-                    "question_id": image_id.item(), 
-                    "answer": self.label2ans[pred.item()], 
-                })
+        # else:
+        # changed code such that it always adds predictions now
+        _, preds = logits.max(-1)
+        for image_id, pred in zip(qid, preds):
+            self.predictions.append({
+                "question_id": image_id.item(), 
+                "answer": self.label2ans[pred.item()], 
+            })
 
     def after_eval(self, **kwargs):
         if len(self.predictions) == 0:
@@ -578,6 +582,30 @@ def train_one_epoch(
 
 @torch.no_grad()
 def evaluate(data_loader, model, device, handler):
+    # breakpoint()
+    metric_logger = utils.MetricLogger(delimiter="  ")
+    header = 'Test:'
+
+    # switch to evaluation mode
+    model.eval()
+    handler.before_eval(metric_logger=metric_logger, data_loader=data_loader)
+
+    for data in metric_logger.log_every(data_loader, 10, header):
+        # breakpoint()
+        for tensor_key in data.keys():
+            data[tensor_key] = data[tensor_key].to(device, non_blocking=True)
+
+        with torch.cuda.amp.autocast():
+            handler.eval_batch(model=model, **data)
+        break
+
+    # gather the stats from all processes
+    metric_logger.synchronize_between_processes()
+
+    return handler.after_eval()
+
+@torch.no_grad()
+def evaluate_logits(data_loader, model, device, handler):
     metric_logger = utils.MetricLogger(delimiter="  ")
     header = 'Test:'
 

@@ -389,8 +389,8 @@ class VQAv2Dataset(BaseDataset):
             for l, s in zip(self.items[index]["labels"], self.items[index]["scores"]):
                 labels[l] = s
             data["labels"] = torch.FloatTensor(labels)
-        else:
-            data["qid"] = self.items[index]["qid"]
+        # else:
+        data["qid"] = self.items[index]["qid"]
         return data
 
     @staticmethod
@@ -408,6 +408,7 @@ class VQAv2Dataset(BaseDataset):
 
     @classmethod
     def make_dataset_index(cls, data_path, tokenizer, annotation_data_path):
+
         with open(os.path.join(annotation_data_path, "v2_OpenEnded_mscoco_train2014_questions.json"), "r") as fp:
             questions_train2014 = json.load(fp)["questions"]
         with open(os.path.join(annotation_data_path, "v2_OpenEnded_mscoco_val2014_questions.json"), "r") as fp:
@@ -838,9 +839,9 @@ def create_dataset_by_split(args, split, is_train=True):
     )
 
 
-def create_downstream_dataset(args, is_eval=False):
+def create_downstream_dataset(args, is_eval=False, eval_dataset = "test"):
     if is_eval:
-        return create_dataset_by_split(args, split="test", is_train=False)
+        return create_dataset_by_split(args, split=eval_dataset, is_train=False)
     else:
         return \
             create_dataset_by_split(args, split="train", is_train=True), \

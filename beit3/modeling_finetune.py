@@ -220,6 +220,7 @@ class BEiT3ForVisualQuestionAnswering(BEiT3Wrapper):
         )
         x = outputs["encoder_out"]
         cls_rep = self.pooler(x)
+        
         return self.head(cls_rep)
 
 

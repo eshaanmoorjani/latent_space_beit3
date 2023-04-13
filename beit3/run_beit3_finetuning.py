@@ -22,7 +22,7 @@ from timm.utils import ModelEma
 from optim_factory import create_optimizer, get_parameter_groups, \
     LayerDecayValueAssigner, get_is_head_flag_for_vit
 
-from engine_for_finetuning import train_one_epoch, get_handler, evaluate
+from engine_for_finetuning import train_one_epoch, get_handler, evaluate, evaluate_logits
 from datasets import create_downstream_dataset
 from utils import NativeScalerWithGradNormCount as NativeScaler
 import utils
@@ -125,6 +125,9 @@ def get_args():
                         help='start epoch')
     parser.add_argument('--eval', action='store_true',
                         help='Perform evaluation only')
+    parser.add_argument('--eval_dataset', type=str, required=False, default='test',
+                        choices=['test', 'val', 'train', ], 
+                        help='Specify a dataset for evaluation')
     parser.add_argument('--dist_eval', action='store_true', default=False,
                         help='Enabling distributed evaluation')
     parser.add_argument('--num_workers', default=10, type=int)
@@ -136,7 +139,7 @@ def get_args():
     # distributed training parameters
     parser.add_argument('--world_size', default=1, type=int,
                         help='number of distributed processes')
-    parser.add_argument('--local_rank', default=-1, type=int)
+    parser.add_argument('--local-rank', default=-1, type=int)
     parser.add_argument('--dist_on_itp', action='store_true')
     parser.add_argument('--dist_url', default='env://',
                         help='url used to set up distributed training')
@@ -355,14 +358,18 @@ def main(args, ds_init):
                 label_smoothing=args.label_smoothing, num_classes=args.nb_classes)
 
     if args.eval:
-        data_loader_test = create_downstream_dataset(args, is_eval=True)
+        data_loader_test = create_downstream_dataset(args, is_eval=True, eval_dataset = args.eval_dataset)
         if args.task in ["nlvr2", "flickr30k", "coco_retrieval", "imagenet"]:
             ext_test_stats, task_key = evaluate(data_loader_test, model, device, task_handler)
             print(f"Accuracy of the network on the {len(data_loader_test.dataset)} test images: {ext_test_stats[task_key]:.3f}%")
             exit(0)
+        # TODO: change name of the task later to include a command line argument
+        elif args.task == "vqav2_logits":
+            result, _ = evaluate_logits(data_loader_test, model, device, task_handler)
+            utils.dump_predictions(args, result, "vqav2_logits_test")
         elif args.task == "vqav2":
             result, _ = evaluate(data_loader_test, model, device, task_handler)
-            utils.dump_predictions(args, result, "vqav2_test")
+            utils.dump_predictions(args, result, "vqav2_" + args.eval_dataset)
             exit(0)
         elif args.task in ["coco_captioning", "nocaps"]:
             predictions, _ = evaluate(data_loader_test, model, device, task_handler)

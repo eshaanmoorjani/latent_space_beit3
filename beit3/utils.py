@@ -21,7 +21,7 @@ import torch
 import torch.distributed as dist
 import torch.nn as nn
 import torch.nn.functional as F
-from torch._six import inf
+from torch import inf
 from torchmetrics import Metric
 from tensorboardX import SummaryWriter
 
@@ -288,6 +288,7 @@ def _get_world_size_env():
 # The implementation code is modified from DeiT (https://github.com/facebookresearch/deit.git)
 def init_distributed_mode(args):
     if args.dist_on_itp:
+        print("using distributed mode") 
         args.rank = _get_rank_env()
         args.world_size = _get_world_size_env()  # int(os.environ['OMPI_COMM_WORLD_SIZE'])
         args.gpu = _get_local_rank_env()
