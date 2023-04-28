@@ -835,6 +835,22 @@ class BeamHypotheses(object):
             return self.worst_score >= best_sum_logprobs / self.max_length ** self.length_penalty
 
 
+def dump_logits(args, indicies, logits,):
+    import pickle
+
+    indicies_arr = indicies
+    logits_arr = logits.cpu().numpy()
+
+    mapping = {}
+
+    for i in range(len(indicies_arr)):
+        index = indicies_arr[i]
+        logit = logits_arr[i]
+        mapping[index] = logit
+
+    with open(args.output_dir + '/logits.pkl', 'wb') as f:
+        pickle.dump(mapping, f)
+
 def dump_predictions(args, result, file_suffix):
     global_rank = get_rank()
     jsons = None

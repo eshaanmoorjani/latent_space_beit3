@@ -21,6 +21,7 @@ from datasets import get_sentencepiece_model_for_beit3
 
 import utils
 
+import numpy as np
 
 class TaskHandler(object):
     def __init__(self) -> None:
@@ -200,6 +201,8 @@ class VQAHandler(TaskHandler):
         self.predictions = []
         self.criterion = nn.BCEWithLogitsLoss(reduction='mean')
         self.label2ans = None
+        self.logits = torch.empty(0)
+        self.qids = [] # torch.empty(0).numpy()
 
     def train_batch(self, model, image, language_tokens, padding_mask, labels):
         logits = model(
@@ -214,11 +217,22 @@ class VQAHandler(TaskHandler):
         self.metric_logger = metric_logger
         self.label2ans = data_loader.dataset.label2ans
 
+    def eval_batch_logits(self, model, image, language_tokens, padding_mask, labels=None, qid=None):
+        logits = model(image=image, question=language_tokens, padding_mask=padding_mask)
+        if self.logits.numel() == 0:
+            self.logits = logits.clone()
+        else:
+            self.logits = torch.cat((self.logits, logits), dim=0)
+
+        self.qids.extend([str(q) for q in qid.tolist()]) #  np.concatenate((self.qids, qid.cpu().numpy()), axis=0)
+
+    def after_eval_logits(self, **kwargs):
+        return self.logits, self.qids, "logits"
+    
     def eval_batch(self, model, image, language_tokens, padding_mask, labels=None, qid=None):
         logits = model(
             image=image, question=language_tokens, 
             padding_mask=padding_mask)
-        # breakpoint()
         batch_size = language_tokens.shape[0]
         if labels is not None:
             # TODO: with the eval_dataset arg, the if statement should be dependent on whether a person selected eval or not. not label based
@@ -226,13 +240,17 @@ class VQAHandler(TaskHandler):
             scores = utils.VQAScore()(logits, labels) * 100.0
             self.metric_logger.meters['score'].update(scores.item(), n=batch_size)
         # else:
-        # changed code such that it always adds predictions now
+        # changed code such that it always adds predictions (basically no else) and outputs labels
         _, preds = logits.max(-1)
+        i = 0
+        # breakpoint()
         for image_id, pred in zip(qid, preds):
             self.predictions.append({
                 "question_id": image_id.item(), 
-                "answer": self.label2ans[pred.item()], 
+                "answer": self.label2ans[pred.item()], # hmm i guess there is only 1 label?
+                 # "label": [self.label2ans[l.item()] for l in (labels[i] == 1).nonzero(as_tuple=True)] if labels is not None else torch.empty(),
             })
+            i += 1
 
     def after_eval(self, **kwargs):
         if len(self.predictions) == 0:
@@ -597,7 +615,6 @@ def evaluate(data_loader, model, device, handler):
 
         with torch.cuda.amp.autocast():
             handler.eval_batch(model=model, **data)
-        break
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
@@ -618,9 +635,10 @@ def evaluate_logits(data_loader, model, device, handler):
             data[tensor_key] = data[tensor_key].to(device, non_blocking=True)
 
         with torch.cuda.amp.autocast():
-            handler.eval_batch(model=model, **data)
+            handler.eval_batch_logits(model=model, **data)
+
 
     # gather the stats from all processes
     metric_logger.synchronize_between_processes()
 
-    return handler.after_eval()
+    return handler.after_eval_logits()

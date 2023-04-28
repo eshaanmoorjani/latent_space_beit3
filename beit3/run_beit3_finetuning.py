@@ -200,6 +200,10 @@ def get_args():
     parser.add_argument('--zero_stage', default=0, type=int,
                         help='ZeRO optimizer stage (default: 0)')
 
+
+    # parameters for kmeans clustering
+    parser.add_argument('--kmeans', action='store_true', default=False)
+
     known_args, _ = parser.parse_known_args()
 
     if known_args.enable_deepspeed:
@@ -364,12 +368,15 @@ def main(args, ds_init):
             print(f"Accuracy of the network on the {len(data_loader_test.dataset)} test images: {ext_test_stats[task_key]:.3f}%")
             exit(0)
         # TODO: change name of the task later to include a command line argument
-        elif args.task == "vqav2_logits":
-            result, _ = evaluate_logits(data_loader_test, model, device, task_handler)
-            utils.dump_predictions(args, result, "vqav2_logits_test")
         elif args.task == "vqav2":
-            result, _ = evaluate(data_loader_test, model, device, task_handler)
-            utils.dump_predictions(args, result, "vqav2_" + args.eval_dataset)
+            if args.kmeans:
+                result, qids, _ = evaluate_logits(data_loader_test, model, device, task_handler)
+                # breakpoint()
+                utils.dump_logits(args, qids, result)
+                # utils.dump_predictions(args, result, "vqav2_logits_test")
+            else:
+                result, _ = evaluate(data_loader_test, model, device, task_handler)
+                utils.dump_predictions(args, result, "vqav2_" + args.eval_dataset)
             exit(0)
         elif args.task in ["coco_captioning", "nocaps"]:
             predictions, _ = evaluate(data_loader_test, model, device, task_handler)
